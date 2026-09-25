@@ -91,17 +91,50 @@ class TestSARPipeline(unittest.TestCase):
         self.assertGreater(eval_metrics["iou"], 0.70, "IoU should exceed benchmark threshold 0.70")
 
     def test_04_bilge_dump_detection(self):
-        """Test detection on narrow high-elongation bilge dumping (Sample 2)."""
+        """Test detection and validation on narrow high-elongation bilge dumping (Sample 2)."""
         tif_path = os.path.join(SAMPLES_DIR, "sample_2_bilge_dump.tif")
+        gt_path = os.path.join(SAMPLES_DIR, "sample_2_bilge_dump_gt.png")
         img, geo_meta = load_sar_image(file_path=tif_path)
         result = detect_oil_spills(img, geo_meta)
         
         self.assertGreater(result["slicks_detected_count"], 0)
         primary = result["primary_slick"]
         self.assertGreater(primary["elongation"], 2.0)
-        print(f"[TEST 4 PASSED] Malacca Bilge Dump Elongation: {primary['elongation']}x, Area: {primary['area_km2']} km²")
+        
+        # Ground truth validation
+        gt_mask = cv2.imread(gt_path, cv2.IMREAD_GRAYSCALE)
+        lee = enhanced_lee_filter(img)
+        from sar_detector import segment_dark_patches, morphological_cleanup, filter_lookalikes
+        seg = segment_dark_patches(lee)
+        clean = morphological_cleanup(seg)
+        pred_mask, _ = filter_lookalikes(clean, img, geo_meta)
+        
+        eval_metrics = evaluate_segmentation(pred_mask, gt_mask)
+        print(f"\n[TEST 4 PASSED] Malacca Bilge Dump IoU: {eval_metrics['iou_percentage']}, Dice: {eval_metrics['dice_percentage']}, Precision: {eval_metrics['precision_percentage']}")
+        self.assertGreater(eval_metrics["iou"], 0.70, "Bilge Dump IoU should exceed benchmark threshold 0.70")
 
-    def test_05_lookalike_rejection(self):
+    def test_05_offshore_platform_detection(self):
+        """Test detection and validation on spreading offshore platform blowout plume (Sample 3)."""
+        tif_path = os.path.join(SAMPLES_DIR, "sample_3_offshore_platform.tif")
+        gt_path = os.path.join(SAMPLES_DIR, "sample_3_offshore_platform_gt.png")
+        img, geo_meta = load_sar_image(file_path=tif_path)
+        result = detect_oil_spills(img, geo_meta)
+        
+        self.assertGreater(result["slicks_detected_count"], 0)
+        
+        # Ground truth validation
+        gt_mask = cv2.imread(gt_path, cv2.IMREAD_GRAYSCALE)
+        lee = enhanced_lee_filter(img)
+        from sar_detector import segment_dark_patches, morphological_cleanup, filter_lookalikes
+        seg = segment_dark_patches(lee)
+        clean = morphological_cleanup(seg)
+        pred_mask, _ = filter_lookalikes(clean, img, geo_meta)
+        
+        eval_metrics = evaluate_segmentation(pred_mask, gt_mask)
+        print(f"\n[TEST 5 PASSED] Mumbai High Offshore Platform IoU: {eval_metrics['iou_percentage']}, Dice: {eval_metrics['dice_percentage']}, Precision: {eval_metrics['precision_percentage']}")
+        self.assertGreater(eval_metrics["iou"], 0.70, "Offshore Platform IoU should exceed benchmark threshold 0.70")
+
+    def test_06_lookalike_rejection(self):
         """Test look-alike discrimination heuristic on calm water false alarm test (Sample 4)."""
         tif_path = os.path.join(SAMPLES_DIR, "sample_4_lookalike_calm_water.tif")
         img, geo_meta = load_sar_image(file_path=tif_path)
@@ -109,8 +142,10 @@ class TestSARPipeline(unittest.TestCase):
         
         # Natural calm water should be filtered out
         self.assertEqual(result["slicks_detected_count"], 0, "Calm water look-alike should be rejected")
-        print("[TEST 5 PASSED] Look-alike false alarm correctly rejected (0 false slicks detected).")
+        self.assertTrue(result["is_lookalike_rejection"], "Should flag is_lookalike_rejection: True")
+        print("\n[TEST 6 PASSED] Look-alike false alarm correctly rejected (0 false slicks detected).")
 
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+

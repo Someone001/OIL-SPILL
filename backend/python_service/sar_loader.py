@@ -116,21 +116,27 @@ def extract_sar_metadata(
     if not meta_status["has_timestamp"] or not meta_status["has_location"]:
         try:
             if file_bytes:
-                pil_img = Image.open(io.BytesIO(file_bytes))
+                with Image.open(io.BytesIO(file_bytes)) as pil_img:
+                    if hasattr(pil_img, '_getexif') and pil_img._getexif():
+                        exif = pil_img._getexif()
+                        for tag_id, value in exif.items():
+                            tag_name = ExifTags.TAGS.get(tag_id, tag_id)
+                            if tag_name in ["DateTimeOriginal", "DateTime", "DateTimeDigitized"]:
+                                meta_status["has_timestamp"] = True
+                                meta_status["timestamp"] = str(value)
+                                if meta_status["metadata_source"] == "none":
+                                    meta_status["metadata_source"] = "exif"
             elif file_path and os.path.exists(file_path):
-                pil_img = Image.open(file_path)
-            else:
-                pil_img = None
-                
-            if pil_img and hasattr(pil_img, '_getexif') and pil_img._getexif():
-                exif = pil_img._getexif()
-                for tag_id, value in exif.items():
-                    tag_name = ExifTags.TAGS.get(tag_id, tag_id)
-                    if tag_name in ["DateTimeOriginal", "DateTime", "DateTimeDigitized"]:
-                        meta_status["has_timestamp"] = True
-                        meta_status["timestamp"] = str(value)
-                        if meta_status["metadata_source"] == "none":
-                            meta_status["metadata_source"] = "exif"
+                with Image.open(file_path) as pil_img:
+                    if hasattr(pil_img, '_getexif') and pil_img._getexif():
+                        exif = pil_img._getexif()
+                        for tag_id, value in exif.items():
+                            tag_name = ExifTags.TAGS.get(tag_id, tag_id)
+                            if tag_name in ["DateTimeOriginal", "DateTime", "DateTimeDigitized"]:
+                                meta_status["has_timestamp"] = True
+                                meta_status["timestamp"] = str(value)
+                                if meta_status["metadata_source"] == "none":
+                                    meta_status["metadata_source"] = "exif"
         except Exception:
             pass
 

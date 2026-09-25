@@ -43,10 +43,16 @@ def detect_vessel_candidates(
     local_sq_mean = uniform_filter(img_f**2, size=bg_window)
     local_std = np.sqrt(np.maximum(local_sq_mean - local_mean**2, 1e-6))
     
-    # Target pixel must exceed local clutter by >= 3.5 standard deviations AND have high absolute backscatter
-    cfar_threshold = local_mean + 3.5 * local_std
-    bright_mask = (img_f >= cfar_threshold) & (image >= 200)
+    # Target pixel must exceed local clutter by >= 2.5 standard deviations AND have high absolute backscatter
+    cfar_threshold = np.minimum(248.0, local_mean + 2.5 * local_std)
+    bright_mask = (img_f >= cfar_threshold) & (image >= 215)
     bright_mask = bright_mask.astype(np.uint8) * 255
+    
+    # Mask out outer 6px image border to avoid boundary crop artifacts
+    bright_mask[:6, :] = 0
+    bright_mask[-6:, :] = 0
+    bright_mask[:, :6] = 0
+    bright_mask[:, -6:] = 0
     
     # Small morphological closing to group multi-pixel ship reflections
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
